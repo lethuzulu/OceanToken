@@ -2,12 +2,13 @@
 pragma solidity ^0.8.24;
 
 // Uncomment this line to use console.log
-// import "hardhat/console.sol";
+import "hardhat/console.sol";
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC20Capped} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Capped.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
+error OceanToken__RewardDepleted(uint256 cap, uint256 totalSupply);
 
 event MintReward(address blockCoinbase, uint256 blockReward);
 
@@ -15,14 +16,13 @@ contract OceanToken is ERC20Capped, Ownable {
     uint256 public blockReward;
 
     constructor(
-        address initialOwner,
         uint256 cap
     ) 
     ERC20("OCEANTOKEN", "OCT") 
     ERC20Capped(cap * (10 ** decimals())) 
-    Ownable(initialOwner) {
-        blockReward = 10 * (10 ** decimals());
-        _mint(initialOwner, cap * (10 ** decimals()));
+    Ownable(msg.sender) {
+        resetBlockReward();
+        _mint(msg.sender, (cap * 50 / 100) * (10 ** decimals()));
     }
 
     function mint(address to, uint256 value) external onlyOwner {
@@ -33,19 +33,26 @@ contract OceanToken is ERC20Capped, Ownable {
         _burn(from, value);
     }
 
-    function setBlockReward(uint256 reward) public onlyOwner {
-        blockReward = reward * (10 ** decimals());
+    function resetBlockReward() public {
+        uint256 remainingTokens = cap() - totalSupply();
+        if (remainingTokens > cap()){
+            revert OceanToken__RewardDepleted(cap(), totalSupply());
+        }
+        blockReward = (remainingTokens * 1/100 );
     }
 
     function mintMinerReward() internal {
         _mint(block.coinbase, blockReward);
         emit MintReward(block.coinbase, blockReward);
+        //reset block reward
+        resetBlockReward();
     }
 
+
     function _update(address from, address to, uint256 value) internal override {
-        ERC20Capped._update(from, to, value);
         if (to != block.coinbase) {
             mintMinerReward();
         }
+        ERC20Capped._update(from, to, value);
     }
 }
